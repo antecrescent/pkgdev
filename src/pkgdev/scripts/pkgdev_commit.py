@@ -107,7 +107,7 @@ class BugzillaAwareBugTag(BugTag):
             return
         except KeyError:
             err = ', '.join([f"invalid commit tag {values!r}",
-            f"{res!r} should be one of: {', '.join([m.value for m in Resolutions])"])
+            f"{res!r} should be one of: {', '.join([m.value for m in Resolutions])}"])
             raise argparse.ArgumentError(self, err)
 
         url = self.parse_url(bug)
