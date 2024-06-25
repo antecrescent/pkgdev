@@ -10,6 +10,7 @@ import tempfile
 import textwrap
 from collections import defaultdict, deque, UserDict
 from dataclasses import dataclass
+from enum import Enum
 from functools import partial
 from itertools import chain
 
@@ -26,7 +27,7 @@ from snakeoil.klass import jit_attr
 from snakeoil.mappings import OrderedFrozenSet, OrderedSet
 from snakeoil.osutils import pjoin
 
-from .. import cli, git, const
+from .. import cli, git
 from ..mangle import GentooMangler, Mangler
 from .argparsers import cwd_repo_argparser, git_repo_argparser
 
@@ -87,22 +88,32 @@ class CommitTag(argparse.Action):
 class BugzillaAwareBugTag(BugTag):
     """Register bug-related tag and resolution to inject into the commit message footer."""
 
+    class Resolutions(Enum):
+        FIXED = "fixed"
+        REMOVED = "removed"
+        PKGREMOVED = "pkgremoved"
+
+
     def __call__(self, parser, namespace, values, option_string=None):
         try:
             bug, res = values.rsplit(":", 1)
             if res.startswith("//"):
                 raise ValueError("URL-like value without resolution")
-            res = res.lower() if res else const.BZ_FIXED
-            if not (bug and res in const.BZ_RESOLUTIONS):
-                raise argparse.ArgumentError(self, f"invalid commit tag: {values}")
+            if not bug:
+                raise KeyError("empty bug")
+            enum_res = Resolutions[res.lower()] if res else Resolutions.FIXED
         except ValueError:
             super().__call__(parser, namespace, values, option_string)
             return
+        except KeyError:
+            err = ', '.join([f"invalid commit tag {values!r}",
+            f"{res!r} should be one of: {', '.join([m.value for m in Resolutions])"])
+            raise argparse.ArgumentError(self, err)
 
         url = self.parse_url(bug)
-        is_bgo = url.split("//", 1)[1].startswith("bugs.gentoo.org")
-        if is_bgo and res != const.BZ_FIXED:
-            url = f"{url} ({res})"
+        is_bgo = "bugs.gentoo.org" in url
+        if is_bgo and not res is Resolutions.FIXED:
+            url = f"{url} ({enum_res.value})"
 
         namespace.footer.add((self.dest.capitalize(), url))
 
